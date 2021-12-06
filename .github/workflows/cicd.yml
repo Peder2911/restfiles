@@ -1,0 +1,50 @@
+
+on:
+  push:
+    tags:
+      - '*'
+jobs:
+  build_and_push:
+    name: "Build and push"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Version from commit tag 
+        id: get_version
+        run: echo ::set-output name=VERSION::$(echo $GITHUB_REF | cut -d / -f 3)
+
+      - name: Make repo name 
+        id: make_name
+        run: echo ::set-output name=NAME::$(echo ${{ github.repository }} | awk '{print tolower ($0)}')
+
+      - name: Login to base registry 
+        uses: docker/login-action@v1 
+        if: ${{ !env.ACT }}
+        with:
+          registry: ${{ secrets.DOCKER_BR_URL }}
+          username: ${{ secrets.DOCKER_BR_USERNAME }}
+          password: ${{ secrets.DOCKER_BR_PASSWORD }}
+
+      - name: Login to project registry 
+        uses: docker/login-action@v1 
+        if: ${{ !env.ACT }}
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      
+      - name: Log what to do
+        run: |
+          echo "Building and pushing ${{ steps.make_name.outputs.NAME }}:${{ steps.get_version.outputs.VERSION }}"
+          echo "Building and pushing ${{ steps.make_name.outputs.NAME }}:latest"
+
+
+      - name: Build and push
+        uses: docker/build-push-action@v2
+        if: ${{ !env.ACT }}
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ steps.make_name.outputs.NAME }}:${{ steps.get_version.outputs.VERSION }}
+            ${{ steps.make_name.outputs.NAME }}:latest
