@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import os
 import base64
@@ -17,10 +18,7 @@ class FileCache():
         return os.path.join(self.dir, self._encode_key(key))
 
     def _encode_key(self, raw_key: str)-> str:
-        return base64.b64encode(raw_key.encode()).decode()
-
-    def _decode_key(self, key: str)-> str:
-        return base64.b64decode(key.encode()).decode()
+        return hashlib.sha256(raw_key.encode()).hexdigest()
 
     def __getitem__(self, key):
         try:
@@ -34,9 +32,6 @@ class FileCache():
 
     def __contains__(self, key):
         return os.path.exists(self._path(key))
-
-    def __iter__(self):
-        return (self._decode_key(k) for k in os.listdir(self.dir))
 
     def _ensure_dir(self):
         try:
@@ -56,11 +51,6 @@ CACHE_DIR = env.str("CACHE_DIR", "./cache")
 
 app = FastAPI()
 cache = FileCache(CACHE_DIR)
-
-@app.get("/files")
-@app.get("/files/")
-def list_files():
-    return {"files": [*cache]}
 
 @app.get("/files/{path:path}")
 @app.get("/files/{path:path}/")
