@@ -1,10 +1,9 @@
 import hashlib
 import logging
 import os
-import base64
+import aiofiles
 from environs import Env
 from fastapi import FastAPI, UploadFile, File, Response
-from fastapi.responses import StreamingResponse
 
 logger = logging.getLogger(__name__)
 
@@ -20,15 +19,17 @@ class FileCache():
     def _encode_key(self, raw_key: str)-> str:
         return hashlib.sha256(raw_key.encode()).hexdigest()
 
-    def __getitem__(self, key):
+    async def get(self, key):
         try:
-            return open(self._path(key), "rb")
+            async with aiofiles.open(self._path(key), "rb") as f:
+                data = await f.read()
         except FileNotFoundError:
             raise KeyError(f"{key} not cached")
+        return data
 
-    def __setitem__(self, key: str, data: bytes):
-        with open(self._path(key), "wb") as f:
-            f.write(data)
+    async def set(self, key: str, data: bytes):
+        async with aiofiles.open(self._path(key), "wb") as f:
+            await f.write(data)
 
     def __contains__(self, key):
         return os.path.exists(self._path(key))
@@ -56,7 +57,8 @@ cache = FileCache(CACHE_DIR)
 @app.get("/files/{path:path}/")
 async def get_cached_file(path: str):
     try:
-        return StreamingResponse(cache[path])
+        data = await cache.get(path)
+        return Response(data, media_type = "application/octet-stream")
     except KeyError:
         return Response(status_code = 404)
 
@@ -71,7 +73,8 @@ async def upload_file_to_cache(
         path: str,
         file: UploadFile = File(None)):
     if not path in cache:
-        cache[path] = await file.read()
+        data = await file.read()
+        await cache.set(path, data)
         return Response(status_code = 201)
     else:
         return Response(status_code = 203)
